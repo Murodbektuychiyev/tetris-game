@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tetris Game</title>
+  <link rel="icon" href="favicon.png" type="image/png">
+  <style>
+    :root {
+      --bg: #0f1220;
+      --panel: #14182c;
+      --text: #eaeaf0;
+      --muted: #9aa0b4;
+      --accent: #6ee7ff;
+      --good: #3ddc97;
+      --warn: #ffd166;
+      --bad: #ef476f;
+      --cell: 30px; /* katak o'lchami */
+      --radius: 16px;
+      --shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: radial-gradient(1200px 800px at 70% 10%, #1a1f3a 0%, #0f1220 60%);
+      color: var(--text);
+      display: grid; place-items: center;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: auto 220px;
+      gap: 18px; padding: 20px;
+      width: min(calc(10*var(--cell) + 220px + 60px), 100%);
+    }
+    .card {
+      background: linear-gradient(180deg, #151a32, #0f1327);
+      border: 1px solid #2a315a;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px;
+    }
+    .title { font-weight: 800; letter-spacing: .4px; }
+    .muted { color: var(--muted); font-size: 12px; }
+
+    /* O'yin maydoni konteyneri */
+    .stage-wrap { position: relative; }
+    canvas#stage {
+      display: block; background: #0a0d1d; border-radius: 10px; border: 1px solid #2a315a;
+    }
+    .overlay {
+      position: absolute; inset: 0; display: grid; place-items: center;
+      background: linear-gradient(180deg, rgba(10,13,29,.2), rgba(10,13,29,.55));
+      color: var(--text); text-align: center;
+      padding: 30px; border-radius: 10px; backdrop-filter: blur(2px);
+    }
+    .overlay.hidden { display: none; }
+    .overlay h1 { margin: 0 0 10px; font-size: 28px; }
+    .overlay p { margin: 4px 0; color: var(--muted); }
+    .overlay .btns { display: flex; gap: 10px; justify-content: center; margin-top: 14px; }
+    button {
+      background: #1b2141; color: var(--text); border: 1px solid #2a315a; border-radius: 12px;
+      padding: 10px 14px; cursor: pointer; font-weight: 700; letter-spacing: .3px;
+      transition: transform .08s ease, background .2s ease, border-color .2s ease;
+    }
+    button:hover { transform: translateY(-1px); background: #202858; }
+
+    .side { display: grid; gap: 14px; align-content: start; }
+    .stat { display: grid; grid-template-columns: 1fr auto; row-gap: 6px; column-gap: 8px; align-items: center; }
+    .stat div.label { color: var(--muted); font-size: 12px; }
+    .stat div.value { font-size: 18px; font-weight: 800; }
+
+    .panels { display: grid; gap: 12px; }
+    .mini {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    }
+    .mini .card { padding: 10px; }
+    canvas#next, canvas#hold { width: 100%; background: #0a0d1d; border-radius: 8px; border: 1px solid #2a315a; display: block; }
+    .help { font-size: 12px; line-height: 1.4; }
+
+    /* Mobil tugmalar */
+    .touch {
+      display: none; gap: 8px; grid-template-columns: repeat(4, 1fr); margin-top: 10px;
+    }
+    .btn-touch { padding: 12px 8px; font-size: 14px; }
+
+    @media (max-width: 820px) {
+      .app { grid-template-columns: 1fr; width: min(96vw, 520px); }
+      .touch { display: grid; }
+    }
+
+    .footer{opacity:.8; font-size:12px; text-align:center}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="card stage-wrap">
+      <canvas id="stage" width="300" height="600" aria-label="Tetris o'yin maydoni" role="img"></canvas>
+      <div id="overlay" class="overlay">
+        <div>
+          <h1>TETRIS</h1>
+          <p class="muted">Boshlash uchun <b>Enter</b> yoki <b>Start</b> tugmasini bosing</p>
+          <div class="btns">
+            <button id="btnStart">Start</button>
+            <button id="btnPause">Pause</button>
+            <button id="btnRestart">Restart</button>
+          </div>
+          <div class="muted" style="margin-top:12px;">
+            ⬅️/➡️ — Chap/O'ng • ⬇️ — Soft drop • Space — Hard drop • Z/X — Aylantirish • C — Hold • P — Pauza
+          </div>
+        </div>
+      </div>
+      <div class="touch">
+        <button class="btn-touch" data-act="left">⬅️</button>
+        <button class="btn-touch" data-act="rotL">↩️</button>
+        <button class="btn-touch" data-act="rotR">↪️</button>
+        <button class="btn-touch" data-act="right">➡️</button>
+        <button class="btn-touch" data-act="soft">⬇️</button>
+        <button class="btn-touch" data-act="hard">⏬</button>
+        <button class="btn-touch" data-act="hold">🅒</button>
+        <button class="btn-touch" data-act="pause">⏸️</button>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <div class="title">Holat</div>
+        <div class="stat" style="margin-top:8px;">
+          <div class="label">Score</div><div class="value" id="score">0</div>
+          <div class="label">Lines</div><div class="value" id="lines">0</div>
+          <div class="label">Level</div><div class="value" id="level">1</div>
+          <div class="label">Highscore</div><div class="value" id="hiscore">0</div>
+        </div>
+      </div>
+      <div class="panels">
+        <div class="mini">
+          <div class="card">
+            <div class="title" style="margin-bottom:8px;">Keyingi</div>
+            <canvas id="next" width="100" height="100"></canvas>
+          </div>
+          <div class="card">
+            <div class="title" style="margin-bottom:8px;">Hold</div>
+            <canvas id="hold" width="100" height="100"></canvas>
+          </div>
+        </div>
+        <div class="card help">
+          <div class="title" style="margin-bottom:6px;">Boshqaruv</div>
+          <ul>
+            <li>⬅️/➡️ — Chap/O'ngga siljitish</li>
+            <li>⬇️ — Soft drop (tez tushirish)</li>
+            <li>Space — Hard drop</li>
+            <li>Z / X — Chap/O'ng aylantirish</li>
+            <li>C — Hold (saqlab turish)</li>
+            <li>P — Pauza</li>
+            <li>Enter — Boshlash/Restart</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+      Owner: Murodbek Tuychiyev
+    </div>
+  </div>
+
+  <script>
+  // ======== TETRIS CORE ========
+  const COLS = 10, ROWS = 20, SIZE = 30; // katak o'lchami px
+  const STAGE = document.getElementById('stage');
+  const CTX = STAGE.getContext('2d');
+  const OVERLAY = document.getElementById('overlay');
+  const NEXT = document.getElementById('next');
+  const NCTX = NEXT.getContext('2d');
+  const HOLD = document.getElementById('hold');
+  const HCTX = HOLD.getContext('2d');
+
+  const UI = {
+    score: document.getElementById('score'),
+    lines: document.getElementById('lines'),
+    level: document.getElementById('level'),
+    hiscore: document.getElementById('hiscore'),
+  };
+
+  const BUTTONS = {
+    start: document.getElementById('btnStart'),
+    pause: document.getElementById('btnPause'),
+    restart: document.getElementById('btnRestart')
+  };
+
+  // Ranglar (Tetris klassik palitra)
+  const COLORS = {
+    0: '#0a0d1d', // bo'sh
+    I: '#00f0f0', // Cyan
+    O: '#f0f000', // Yellow
+    T: '#a000f0', // Purple
+    S: '#00f000', // Green
+    Z: '#f00000', // Red
+    J: '#0000f0', // Blue
+    L: '#f0a000'  // Orange
+  };
+
+  // Tetromino matritsalari (4×4) va aylanishlari
+  const SHAPES = {
+    I: [
+      [ [0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0] ],
+      [ [0,0,1,0], [0,0,1,0], [0,0,1,0], [0,0,1,0] ],
+      [ [0,0,0,0], [0,0,0,0], [1,1,1,1], [0,0,0,0] ],
+      [ [0,1,0,0], [0,1,0,0], [0,1,0,0], [0,1,0,0] ],
+    ],
+    O: [
+      [ [0,1,1,0], [0,1,1,0], [0,0,0,0], [0,0,0,0] ],
+      [ [0,1,1,0], [0,1,1,0], [0,0,0,0], [0,0,0,0] ],
+      [ [0,1,1,0], [0,1,1,0], [0,0,0,0], [0,0,0,0] ],
+      [ [0,1,1,0], [0,1,1,0], [0,0,0,0], [0,0,0,0] ],
+    ],
+    T: [
+      [ [0,1,0,0], [1,1,1,0], [0,0,0,0], [0,0,0,0] ],
+      [ [0,1,0,0], [0,1,1,0], [0,1,0,0], [0,0,0,0] ],
+      [ [0,0,0,0], [1,1,1,0], [0,1,0,0], [0,0,0,0] ],
+      [ [0,1,0,0], [1,1,0,0], [0,1,0,0], [0,0,0,0] ],
+    ],
+    S: [
+      [ [0,1,1,0], [1,1,0,0], [0,0,0,0], [0,0,0,0] ],
+      [ [0,1,0,0], [0,1,1,0], [0,0,1,0], [0,0,0,0] ],
+      [ [0,0,0,0], [0,1,1,0], [1,1,0,0], [0,0,0,0] ],
+      [ [1,0,0,0], [1,1,0,0], [0,1,0,0], [0,0,0,0] ],
+    ],
+    Z: [
+      [ [1,1,0,0], [0,1,1,0], [0,0,0,0], [0,0,0,0] ],
+      [ [0,0,1,0], [0,1,1,0], [0,1,0,0], [0,0,0,0] ],
+      [ [0,0,0,0], [1,1,0,0], [0,1,1,0], [0,0,0,0] ],
+      [ [0,1,0,0], [1,1,0,0], [1,0,0,0], [0,0,0,0] ],
+    ],
+    J: [
+      [ [1,0,0,0], [1,1,1,0], [0,0,0,0], [0,0,0,0] ],
+      [ [0,1,1,0], [0,1,0,0], [0,1,0,0], [0,0,0,0] ],
+      [ [0,0,0,0], [1,1,1,0], [0,0,1,0], [0,0,0,0] ],
+      [ [0,1,0,0], [0,1,0,0], [1,1,0,0], [0,0,0,0] ],
+    ],
+    L: [
+      [ [0,0,1,0], [1,1,1,0], [0,0,0,0], [0,0,0,0] ],
+      [ [0,1,0,0], [0,1,0,0], [0,1,1,0], [0,0,0,0] ],
+      [ [0,0,0,0], [1,1,1,0], [1,0,0,0], [0,0,0,0] ],
+      [ [1,1,0,0], [0,1,0,0], [0,1,0,0], [0,0,0,0] ],
+    ],
+  };
+
+  // 7-bag generator
+  function newBag() {
+    const types = ['I','O','T','S','Z','J','L'];
+    for (let i = types.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [types[i], types[j]] = [types[j], types[i]];
+    }
+    return types;
+  }
+
+  // Board yaratish
+  function createBoard(w=COLS, h=ROWS) {
+    return Array.from({length: h}, () => Array(w).fill(0));
+  }
+
+  // O'yin holati
+  const state = {
+    board: createBoard(),
+    queue: newBag(),
+    current: null, // {type,x,y,rot}
+    hold: null,
+    canHold: true,
+    score: 0,
+    lines: 0,
+    level: 1,
+    gravity: 1000, // ms
+    fallTimer: 0,
+    running: false,
+    paused: false,
+    over: false,
+    lastTime: 0,
+    hiscore: +localStorage.getItem('tetris_hiscore') || 0,
+  };
+
+  UI.hiscore.textContent = state.hiscore;
+
+  function gravityFor(level){
+    // oddiy: har levelda ~10% tezlashadi
+    return Math.max(80, Math.floor(1000 / (1 + 0.12*(level-1))));
+  }
+
+  // Current piece yaratish
+  function spawn() {
+    if (state.queue.length === 0) state.queue = newBag();
+    const type = state.queue.shift();
+    const piece = { type, x: 3, y: -1, rot: 0 };
+    if (!canPlace(piece)) {
+      gameOver();
+      return null;
+    }
+    state.current = piece;
+    state.canHold = true;
+    drawNext();
+    return piece;
+  }
+
+  // Joylash mumkinligini tekshirish
+  function canPlace(p) {
+    const shape = SHAPES[p.type][p.rot];
+    for (let r=0;r<4;r++) {
+      for (let c=0;c<4;c++) {
+        if (!shape[r][c]) continue;
+        const x = p.x + c;
+        const y = p.y + r;
+        if (x < 0 || x >= COLS || y >= ROWS) return false;
+        if (y >= 0 && state.board[y][x]) return false;
+      }
+    }
+    return true;
+  }
+
+  // Wall-kick: oddiy variant (0, -1, +1, -2, +2)
+  function tryRotate(dir) { // dir: +1 o'ng, -1 chap
+    if (!state.current) return;
+    const p = {...state.current};
+    p.rot = (p.rot + (dir>0?1:3)) % 4;
+    const kicks = [0, -1, 1, -2, 2];
+    for (const k of kicks) {
+      const test = {...p, x: p.x + k};
+      if (canPlace(test)) { state.current = test; return; }
+    }
+  }
+
+  // Harakat
+  function move(dx, dy) {
+    if (!state.current) return false;
+    const p = {...state.current, x: state.current.x + dx, y: state.current.y + dy};
+    if (canPlace(p)) { state.current = p; return true; }
+    return false;
+  }
+
+  // Ghost piece joyini topish
+  function ghostOf(p){
+    const g = {...p};
+    while (moveTest(g, 0, 1)) g.y++;
+    return g;
+  }
+  function moveTest(p, dx, dy){
+    const t = {...p, x: p.x+dx, y: p.y+dy};
+    return canPlace(t);
+  }
+
+  // Lock (qo'ndirish)
+  function lockPiece(){
+    const {type, x, y, rot} = state.current;
+    const shape = SHAPES[type][rot];
+    for (let r=0;r<4;r++) for (let c=0;c<4;c++){
+      if (!shape[r][c]) continue;
+      const X = x + c, Y = y + r;
+      if (Y >= 0 && Y < ROWS && X >= 0 && X < COLS) state.board[Y][X] = type;
+    }
+    // qator tozalash
+    let cleared = 0;
+    for (let row=ROWS-1; row>=0; ){
+      if (state.board[row].every(cell => cell)){
+        state.board.splice(row,1);
+        state.board.unshift(Array(COLS).fill(0));
+        cleared++;
+      } else row--;
+    }
+    if (cleared){
+      const add = [0,100,300,500,800][cleared];
+      state.score += add;
+      state.lines += cleared;
+      const newLevel = 1 + Math.floor(state.lines / 10);
+      if (newLevel !== state.level){ state.level = newLevel; state.gravity = gravityFor(state.level); }
+    }
+    if (state.score > state.hiscore){ state.hiscore = state.score; UI.hiscore.textContent = state.hiscore; localStorage.setItem('tetris_hiscore', state.hiscore); }
+    spawn();
+  }
+
+  // Hard drop
+  function hardDrop(){
+    if (!state.current) return;
+    let dist = 0;
+    while (move(0,1)) dist++;
+    // bonus ball (katak bo'yicha 2)
+    state.score += dist * 2;
+    lockPiece();
+  }
+
+  // Soft drop
+  function softDrop(){
+    if (move(0,1)) state.score += 1; // soft uchun +1/katak
+  }
+
+  function holdPiece(){
+    if (!state.canHold || !state.current) return;
+    const t = state.current.type;
+    if (state.hold === null){
+      state.hold = t; state.current = null; drawHold(); spawn();
+    } else {
+      const swap = state.hold; state.hold = t; drawHold();
+      state.current = { type: swap, x: 3, y: -1, rot: 0 };
+      if (!canPlace(state.current)) { gameOver(); return; }
+    }
+    state.canHold = false;
+  }
+
+  function drawCell(ctx, x, y, type, alpha=1){
+    const px = x*SIZE, py = y*SIZE;
+    ctx.globalAlpha = alpha;
+    // cell bg
+    ctx.fillStyle = '#0b0f22';
+    ctx.fillRect(px, py, SIZE, SIZE);
+    // piece
+    ctx.fillStyle = COLORS[type];
+    ctx.fillRect(px+1, py+1, SIZE-2, SIZE-2);
+    // glossy
+    ctx.fillStyle = 'rgba(255,255,255,.08)';
+    ctx.fillRect(px+2, py+2, SIZE-4, Math.floor((SIZE-4)/2));
+    ctx.globalAlpha = 1;
+  }
+
+  function render(){
+    // clear
+    CTX.clearRect(0,0,STAGE.width,STAGE.height);
+    // board
+    for (let r=0;r<ROWS;r++){
+      for (let c=0;c<COLS;c++){
+        if (state.board[r][c]) drawCell(CTX, c, r, state.board[r][c]);
+        else {
+          // grid lines
+          CTX.fillStyle = '#0b0f22';
+          CTX.fillRect(c*SIZE, r*SIZE, SIZE, SIZE);
+          CTX.strokeStyle = 'rgba(255,255,255,0.03)';
+          CTX.strokeRect(c*SIZE, r*SIZE, SIZE, SIZE);
+        }
+      }
+    }
+    // current
+    if (state.current){
+      const g = ghostOf(state.current);
+      // ghost
+      const shapeG = SHAPES[g.type][g.rot];
+      for (let r=0;r<4;r++) for (let c=0;c<4;c++) if (shapeG[r][c]) {
+        const gx = g.x + c, gy = g.y + r; if (gy>=0) drawCell(CTX, gx, gy, g.type, 0.25);
+      }
+      // piece
+      const {type,x,y,rot} = state.current;
+      const shape = SHAPES[type][rot];
+      for (let r=0;r<4;r++) for (let c=0;c<4;c++) if (shape[r][c]) {
+        const X = x + c, Y = y + r; if (Y>=0) drawCell(CTX, X, Y, type, 1);
+      }
+    }
+
+    // UI
+    UI.score.textContent = state.score;
+    UI.lines.textContent = state.lines;
+    UI.level.textContent = state.level;
+  }
+
+  function drawMini(ctx, type){
+    ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height);
+    if (!type) return;
+    const mat = SHAPES[type][0];
+    // markazlash
+    const cell = 20; // mini o'lcham
+    const tmp = document.createElement('canvas');
+    tmp.width = 4*cell; tmp.height = 4*cell;
+    const tctx = tmp.getContext('2d');
+    for (let r=0;r<4;r++) for (let c=0;c<4;c++) if (mat[r][c]){
+      // mini chizish
+      tctx.fillStyle = COLORS[type];
+      tctx.fillRect(c*cell+1, r*cell+1, cell-2, cell-2);
+      tctx.fillStyle = 'rgba(255,255,255,.1)';
+      tctx.fillRect(c*cell+2, r*cell+2, cell-4, Math.floor((cell-4)/2));
+    }
+    // center paste
+    const offx = Math.floor((ctx.canvas.width - tmp.width)/2);
+    const offy = Math.floor((ctx.canvas.height - tmp.height)/2);
+    ctx.drawImage(tmp, offx, offy);
+  }
+
+  function peekNext(){
+    if (state.queue.length === 0) state.queue = newBag();
+    return state.queue[0];
+  }
+  function drawNext(){ drawMini(NCTX, peekNext()); }
+  function drawHold(){ drawMini(HCTX, state.hold); }
+
+  // Game Loop
+  function loop(time){
+    const dt = time - state.lastTime; state.lastTime = time;
+    if (state.running && !state.paused && !state.over){
+      state.fallTimer += dt;
+      if (state.fallTimer >= state.gravity){
+        state.fallTimer = 0;
+        if (!move(0,1)) lockPiece();
+      }
+      render();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function startGame(){
+    state.board = createBoard();
+    state.queue = newBag();
+    state.current = null;
+    state.hold = null; state.canHold = true; drawHold();
+    state.score = 0; state.lines = 0; state.level = 1;
+    state.gravity = gravityFor(state.level);
+    state.fallTimer = 0; state.over = false; state.running = true; state.paused = false;
+    spawn(); drawNext();
+    OVERLAY.classList.add('hidden');
+  }
+
+  function pauseGame(){
+    if (!state.running || state.over) return;
+    state.paused = !state.paused;
+    OVERLAY.classList.toggle('hidden', !state.paused);
+    if (state.paused){
+      OVERLAY.querySelector('h1').textContent = 'PAUSE';
+      OVERLAY.querySelector('p').textContent = 'Davom ettirish uchun P yoki Start';
+    }
+  }
+
+  function gameOver(){
+    state.over = true; state.running = false;
+    OVERLAY.classList.remove('hidden');
+    OVERLAY.querySelector('h1').textContent = 'GAME OVER';
+    OVERLAY.querySelector('p').innerHTML = `Score: <b>${state.score}</b> • Lines: <b>${state.lines}</b>`;
+  }
+
+  // Input
+  const keymap = {
+    ArrowLeft: () => move(-1,0),
+    ArrowRight: () => move(1,0),
+    ArrowDown: () => softDrop(),
+    Space: () => hardDrop(),
+    KeyZ: () => tryRotate(-1),
+    KeyX: () => tryRotate(1),
+    KeyQ: () => tryRotate(-1),
+    KeyE: () => tryRotate(1),
+    KeyC: () => holdPiece(),
+    KeyP: () => pauseGame(),
+    Enter: () => startGame(),
+  };
+
+  // Continuous move repeat (DAS/ARR sodda)
+  let held = null, holdTimer = 0, repeat = 50, delay = 150;
+  window.addEventListener('keydown', (e)=>{
+    const code = e.code === 'Space' ? 'Space' : e.code; // Space
+    if (keymap[code]){
+      e.preventDefault();
+      // birinchi triggger
+      if (code === 'ArrowLeft' || code === 'ArrowRight' || code === 'ArrowDown'){
+        keymap[code](); held = code; holdTimer = 0; return;
+      }
+      keymap[code]();
+    }
+  }, {passive:false});
+  window.addEventListener('keyup', (e)=>{
+    const code = e.code === 'Space' ? 'Space' : e.code;
+    if (held === code) held = null;
+  });
+
+  function handleHeld(dt){
+    if (!held) return;
+    holdTimer += dt;
+    const d = (held === 'ArrowDown') ? 0 : delay; // down darhol tez-tez
+    if (holdTimer > d){
+      while (holdTimer > d + repeat){
+        holdTimer -= repeat; keymap[held]();
+      }
+    }
+  }
+
+  // Touch controls
+  document.querySelectorAll('.btn-touch').forEach(btn=>{
+    const act = btn.dataset.act;
+    btn.addEventListener('click', ()=>{
+      const A = {
+        left: ()=>move(-1,0), right: ()=>move(1,0), soft: ()=>softDrop(), hard: ()=>hardDrop(),
+        rotL: ()=>tryRotate(-1), rotR: ()=>tryRotate(1), hold: ()=>holdPiece(), pause: ()=>pauseGame()
+      }[act];
+      if (A) A();
+    });
+  });
+
+  // Buttons
+  BUTTONS.start.onclick = startGame;
+  BUTTONS.pause.onclick = pauseGame;
+  BUTTONS.restart.onclick = startGame;
+
+  // Main RAF (qo'shimcha: held handling)
+  function raf(t){
+    const dt = t - (raf.last||t); raf.last = t;
+    if (state.running && !state.paused && !state.over){ handleHeld(dt); }
+    loop(t);
+  }
+  requestAnimationFrame(raf);
+
+  // Birinchi render (overlay ko'rinadi)
+  render(); drawNext(); drawHold();
+  </script>
+</body>
+</html>
