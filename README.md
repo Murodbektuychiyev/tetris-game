@@ -42,4 +42,4 @@ Mobil ekranlarda avtomatik virtual tugmalar chiqadi:
 ## 🚀 Ishga tushirish
 1. Fayllarni yuklab oling yoki repository’ni clone qiling:
    ```bash
-   git clone https://github.com/username/tetris-game.git
+   https://github.com/Murodbektuychiyev/tetris-game.git
